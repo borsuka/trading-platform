@@ -14,6 +14,24 @@ from app.config import AppEnv, ExchangeName, Settings, TradingMode
 from app.config.settings import RiskSettings
 
 
+@pytest.fixture(autouse=True)
+def isolated_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run every test in this module against an empty environment.
+
+    ``_env_file=None`` stops pydantic-settings reading the ``.env`` file, but it does not stop
+    it reading real environment variables - and CI exports ``SECRET_KEY`` for the test job.
+    That turned "production refuses the shipped development secret" into a test of whatever
+    happened to be exported, and it passed locally while failing in CI.
+
+    The names are derived from the model rather than listed by hand, so a field added later is
+    covered without anyone remembering to update this.
+    """
+    for name in Settings.model_fields:
+        monkeypatch.delenv(name.upper(), raising=False)
+    for name in RiskSettings.model_fields:
+        monkeypatch.delenv(f"RISK_{name.upper()}", raising=False)
+
+
 class TestSafetyDefaults:
     """The defaults that stop an installation trading real money by accident."""
 
