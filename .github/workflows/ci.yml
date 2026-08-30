@@ -1,0 +1,379 @@
+# Continuous integration.
+#
+# The pipeline fails on any failing test. It does not report success with failing critical
+# tests, and the backtester's bias-detection tests are treated as blocking: if a coin-flip
+# strategy starts making money in the simulator, every backtest result is meaningless and
+# nothing else in the build matters.
+
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # Backend
+  # ------------------------------------------------------------------ #
+  backend-lint:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Ruff
+        working-directory: backend
+        run: ruff check . --output-format=github
+      - name: MyPy
+        working-directory: backend
+        run: mypy app
+
+  backend-test:
+    name: Tests (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [unit, integration, e2e]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run ${{ matrix.suite }} tests
+        working-directory: backend
+        env:
+          APP_ENV: test
+          DATABASE_URL: sqlite+aiosqlite:///./test.db
+          SECRET_KEY: ci-only-secret-not-used-in-production
+        run: pytest tests/${{ matrix.suite }} -q --tb=short
+
+  backend-safety-gate:
+    name: Safety gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Backtester bias detection
+        working-directory: backend
+        env:
+          APP_ENV: test
+        run: |
+          # If a coin-flip strategy makes money in the simulator, every backtest number in
+          # this repository is meaningless. This gate is not optional.
+          pytest tests/unit/test_backtesting.py::TestBacktesterBias -q --tb=short
+
+      - name: Risk-limit enforcement
+        working-directory: backend
+        env:
+          APP_ENV: test
+        run: pytest tests/unit/test_risk.py -q --tb=short
+
+      - name: Order idempotency and timeout recovery
+        working-directory: backend
+        env:
+          APP_ENV: test
+        run: pytest tests/unit/test_execution.py::TestIdempotency -q --tb=short
+
+      - name: Withdrawal-permission rejection
+        working-directory: backend
+        env:
+          APP_ENV: test
+        run: |
+          pytest tests/integration/test_live_adapters.py -q --tb=short \
+            -k "withdraw or preflight or refused"
+
+      - name: Default mode must be paper
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import sys
+          from app.config import Settings
+          settings = Settings()
+          problems = []
+          if settings.trading_mode.value != "paper":
+              problems.append(f"default TRADING_MODE is {settings.trading_mode.value}")
+          if settings.live_trading_enabled:
+              problems.append("LIVE_TRADING_ENABLED defaults to true")
+          if settings.exchange.value != "paper":
+              problems.append(f"default EXCHANGE is {settings.exchange.value}")
+          if problems:
+              print("SAFETY DEFAULTS VIOLATED: " + "; ".join(problems))
+              sys.exit(1)
+          print("Safety defaults OK: paper mode, live disabled, paper exchange")
+          PY
+
+      - name: No forbidden marketing language
+        run: bash scripts/check_claims.sh
+
+  backend-migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading
+          POSTGRES_DB: trading_test
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+        ports: ["5432:5432"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Upgrade, downgrade, upgrade
+        working-directory: backend
+        env:
+          APP_ENV: staging
+          SECRET_KEY: ci-only-secret
+          DATABASE_URL: postgresql+asyncpg://trading:trading@localhost:5432/trading_test
+        run: |
+          # A migration that cannot be reverted is a migration you cannot deploy safely.
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+  # ------------------------------------------------------------------ #
+  # License server
+  # ------------------------------------------------------------------ #
+  license-server:
+    name: License server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        working-directory: license-server
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint
+        working-directory: license-server
+        run: ruff check .
+      - name: Test
+        working-directory: license-server
+        run: pytest tests -q
+
+  # ------------------------------------------------------------------ #
+  # Frontend
+  # ------------------------------------------------------------------ #
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Type check
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Build (server)
+        working-directory: frontend
+        run: npm run build
+      - name: Build (static export for the desktop application)
+        working-directory: frontend
+        env:
+          NEXT_OUTPUT: export
+          # Same origin as the API in the desktop build, so no host is baked in.
+          NEXT_PUBLIC_API_URL: ""
+        run: |
+          npm run build
+          # A silent export failure would ship a desktop application with no interface.
+          test -f out/index.html
+          test -f out/bots/view.html
+
+  # ------------------------------------------------------------------ #
+  # Security
+  # ------------------------------------------------------------------ #
+  security:
+    name: Security checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pip-audit
+
+      - name: Dependency audit
+        working-directory: backend
+        continue-on-error: true  # advisory: a new CVE should not block an unrelated fix
+        run: pip-audit --desc
+
+      - name: No committed secrets
+        run: |
+          if git ls-files | grep -E "^\.env$|\.env\.(local|production)$"; then
+            echo "A .env file is committed. Remove it and rotate everything in it."
+            exit 1
+          fi
+          if git grep -nE "(api[_-]?secret|private[_-]?key)\s*=\s*['\"][A-Za-z0-9+/]{20,}" \
+               -- '*.py' '*.ts' '*.tsx' '*.yml' '*.yaml'; then
+            echo "Possible hardcoded secret found."
+            exit 1
+          fi
+          echo "No committed secrets found"
+
+      - name: Secret redaction actually works
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import io, json, logging, sys
+          from app.core.logging import configure_logging, get_logger
+
+          buffer = io.StringIO()
+          configure_logging(json_output=True, force=True)
+          handler = logging.StreamHandler(buffer)
+          root = logging.getLogger()
+          root.handlers[0].stream = buffer
+
+          get_logger("ci").info(
+              "probe",
+              api_secret="SUPER-SECRET-VALUE",
+              password="hunter2",
+              nested={"api_key": "ANOTHER-SECRET"},
+          )
+          output = buffer.getvalue()
+          leaked = [s for s in ("SUPER-SECRET-VALUE", "hunter2", "ANOTHER-SECRET") if s in output]
+          if leaked:
+              print("SECRET LEAKED INTO LOGS:", leaked)
+              print(output)
+              sys.exit(1)
+          print("Secret redaction verified")
+          PY
+
+  # ------------------------------------------------------------------ #
+  # Containers
+  # ------------------------------------------------------------------ #
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: [backend-lint, backend-safety-gate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: trading-platform:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Container smoke test
+        run: |
+          docker run -d --name tp-ci -p 8000:8000 \
+            -e APP_ENV=development \
+            -e DATABASE_URL="sqlite+aiosqlite:///./data/ci.db" \
+            -e SECRET_KEY=ci-only-secret-not-used-in-production \
+            -e HOST=0.0.0.0 \
+            trading-platform:ci serve
+
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8000/live >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+
+          curl -fsS http://localhost:8000/live
+          curl -fsS http://localhost:8000/health
+
+          # The container must never come up in live mode by default.
+          mode=$(curl -sI http://localhost:8000/info | grep -i "x-trading-mode" | tr -d '\r' | awk '{print $2}')
+          echo "Container reports mode: $mode"
+          if [ "$mode" != "PAPER" ]; then
+            echo "Container did not default to PAPER mode"
+            docker logs tp-ci
+            exit 1
+          fi
+
+          docker rm -f tp-ci
+
+  # ------------------------------------------------------------------ #
+  # Gate
+  # ------------------------------------------------------------------ #
+  ci-passed:
+    name: CI passed
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - backend-lint
+      - backend-test
+      - backend-safety-gate
+      - backend-migrations
+      - license-server
+      - frontend
+      - security
+      - docker
+    steps:
+      - name: Verify every job succeeded
+        run: |
+          results='${{ join(needs.*.result, ' ') }}'
+          echo "Job results: $results"
+          for result in $results; do
+            if [ "$result" != "success" ]; then
+              echo "A required job did not succeed. The build is NOT green."
+              exit 1
+            fi
+          done
+          echo "All checks passed."

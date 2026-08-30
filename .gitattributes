@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# cmd.exe needs CRLF. A batch file checked out with LF endings fails in ways that look
+# like the file is missing rather than malformed.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Build output, not source.
+frontend/out/** linguist-generated=true

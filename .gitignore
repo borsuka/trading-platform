@@ -1,0 +1,66 @@
+# --- Secrets. Never commit these. ---------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+credentials.json
+
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+
+# --- Node / Next.js -----------------------------------------------------------
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+
+# --- Databases and runtime data ----------------------------------------------
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.csv
+!data/.gitkeep
+logs/
+*.log
+
+# --- Editors and OS -----------------------------------------------------------
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Build artefacts ----------------------------------------------------------
+desktop/dist/
+desktop/build/
+*.spec
+!pyproject.toml

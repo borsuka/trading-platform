@@ -1,0 +1,144 @@
+[project]
+name = "trading-platform-backend"
+version = "1.0.0"
+description = "Production-grade algorithmic trading platform - backend and trading engine"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14",
+    "asyncpg>=0.30",
+    "aiosqlite>=0.20",
+    "redis>=5.2",
+    "httpx>=0.28",
+    "websockets>=13.1",
+    "pandas>=2.2",
+    "numpy>=2.1",
+    "python-jose[cryptography]>=3.3",
+    "argon2-cffi>=23.1",
+    "cryptography>=43.0",
+    "python-multipart>=0.0.12",
+    "structlog>=24.4",
+    "orjson>=3.10",
+    "tenacity>=9.0",
+    "email-validator>=2.2",
+    # RSS feeds are untrusted input from the public internet; the stdlib XML parser
+    # will happily expand a hostile entity payload until memory runs out.
+    "defusedxml>=0.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-python-jose",
+    "pandas-stubs",
+]
+
+# The native window for the desktop application. Optional on purpose: without it the
+# launcher falls back to the default browser and everything still works.
+desktop = [
+    "pywebview>=5.0",
+]
+
+[project.scripts]
+trading-bot = "app.cli:main"
+trading-platform = "app.desktop:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:app.*"]
+markers = [
+    "integration: integration tests",
+    "e2e: end-to-end tests",
+    "slow: slow tests",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "ASYNC", "S", "T20", "RET", "ARG", "PTH"]
+ignore = [
+    "S101",    # assert - used in tests and internal invariants
+    "RUF012",  # mutable class attrs need ClassVar
+    "B008",    # FastAPI Depends() in defaults
+    "N818",    # exception naming
+    "SIM108",  # ternary readability
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "ARG", "PLR2004"]
+"migrations/*" = ["ALL"]
+# argparse dispatches every subcommand with the same (args) signature, whether
+# or not that particular command reads it.
+"app/cli.py" = ["T20", "ARG001"]
+# The desktop launcher IS a console program: its progress and error reporting is stdout,
+# and it opens a loopback URL it constructed itself.
+"app/desktop.py" = ["T20", "S310"]
+# Implementing an abstract interface routinely means accepting parameters a particular
+# backend does not use. Renaming them to _foo would break keyword-argument callers.
+"app/exchanges/*" = ["ARG002"]
+"app/paper_trading/replay.py" = ["ARG002"]
+"app/notifications/*" = ["ARG002"]
+"app/news/providers.py" = ["ARG002"]
+"app/database/base.py" = ["ARG002"]
+# Enum member names like TOKEN_UNLOCK and PASSWORD_CHANGED are event names, not secrets.
+"app/core/enums.py" = ["S105"]
+# `token_type` is a discriminator field name, not a credential.
+"app/auth/security.py" = ["S105", "S106"]
+"app/auth/service.py" = ["S105"]
+"app/api/schemas.py" = ["S105"]
+# A `user: CurrentUser` parameter is how a route declares "authentication
+# required"; the handler often does not need the object itself.
+"app/api/v1/*" = ["ARG001"]
+# FastAPI exception handlers must accept (request, exc) whether or not the
+# handler consults them.
+"app/main.py" = ["ARG001"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+warn_redundant_casts = true
+warn_unused_ignores = false
+warn_return_any = true
+no_implicit_optional = true
+strict_equality = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["migrations/", "build/"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# `resource` is a Unix-only stdlib module. The code guards its use at runtime; mypy on
+# Windows cannot see the attributes at all.
+[[tool.mypy.overrides]]
+module = "resource"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "app.monitoring.health"
+disable_error_code = ["attr-defined"]

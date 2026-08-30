@@ -1,0 +1,36 @@
+[project]
+name = "license-server"
+version = "1.0.0"
+description = "License activation and device binding for the trading platform"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "email-validator>=2.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "httpx>=0.28", "ruff>=0.8"]
+
+[project.scripts]
+license-server = "app.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "S"]
+ignore = ["S101", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test fixtures for a token and a signing secret are not real credentials.
+"tests/*" = ["S105", "S106"]

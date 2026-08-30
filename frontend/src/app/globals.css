@@ -1,0 +1,507 @@
+/* Design tokens.
+ *
+ * Light and dark are both first-class. The dark palette is not an inverted light palette:
+ * traders read these screens for hours, and inverted greys produce the wrong contrast on the
+ * numbers that matter.
+ *
+ * Profit/loss colours are deliberately not pure red/green — those are hard to distinguish for
+ * the ~8% of men with red-green colour vision deficiency, and a P&L number is exactly the
+ * wrong place to rely on hue alone. Every P&L figure also carries an explicit +/- sign.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f7f9;
+  --bg-raised: #ffffff;
+  --bg-sunken: #eceef2;
+  --border: #d8dce4;
+  --border-strong: #b9c0cc;
+
+  --text: #12161f;
+  --text-muted: #5a6478;
+  --text-faint: #8892a4;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-fg: #ffffff;
+
+  --profit: #0f7a52;
+  --profit-bg: #e3f5ec;
+  --loss: #c2410c;
+  --loss-bg: #fdece3;
+  --warn: #a16207;
+  --warn-bg: #fdf6e3;
+  --danger: #b91c1c;
+  --danger-bg: #fdeaea;
+
+  --paper: #0f766e;
+  --paper-bg: #d9f2ef;
+  --live: #b91c1c;
+  --live-bg: #fde8e8;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 2px rgb(16 22 31 / 0.06), 0 1px 3px rgb(16 22 31 / 0.04);
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1017;
+    --bg-raised: #151a23;
+    --bg-sunken: #0a0d13;
+    --border: #262d3a;
+    --border-strong: #38414f;
+
+    --text: #e6e9ef;
+    --text-muted: #9aa4b6;
+    --text-faint: #6b7688;
+
+    --accent: #60a5fa;
+    --accent-hover: #93c5fd;
+    --accent-fg: #0d1017;
+
+    --profit: #4ade80;
+    --profit-bg: #10281c;
+    --loss: #fb923c;
+    --loss-bg: #2b1710;
+    --warn: #fbbf24;
+    --warn-bg: #2a2110;
+    --danger: #f87171;
+    --danger-bg: #2c1414;
+
+    --paper: #5eead4;
+    --paper-bg: #0f2a27;
+    --live: #f87171;
+    --live-bg: #2c1414;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 0.5rem;
+  line-height: 1.25;
+  font-weight: 650;
+}
+h1 {
+  font-size: 1.4rem;
+}
+h2 {
+  font-size: 1.1rem;
+}
+h3 {
+  font-size: 0.95rem;
+}
+
+/* --- Layout ------------------------------------------------------------- */
+.shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--bg-raised);
+  border-right: 1px solid var(--border);
+  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar__brand {
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.6rem 1rem;
+  letter-spacing: -0.01em;
+}
+
+.sidebar__section {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  padding: 0.9rem 0.6rem 0.3rem;
+}
+
+.navlink {
+  display: block;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+.navlink:hover {
+  background: var(--bg-sunken);
+  color: var(--text);
+  text-decoration: none;
+}
+.navlink[data-active="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 550;
+}
+
+.main {
+  padding: 1.25rem 1.5rem 3rem;
+  max-width: 1400px;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar__section {
+    display: none;
+  }
+  .main {
+    padding: 1rem;
+  }
+}
+
+/* --- Mode banner --------------------------------------------------------- */
+.mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.mode-banner[data-live="false"] {
+  background: var(--paper-bg);
+  color: var(--paper);
+}
+.mode-banner[data-live="true"] {
+  background: var(--live-bg);
+  color: var(--live);
+  /* A live banner is the one piece of chrome that must be impossible to overlook. */
+  border-bottom: 2px solid var(--live);
+}
+
+/* --- Cards and tables ---------------------------------------------------- */
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+}
+
+.grid {
+  display: grid;
+  gap: 0.85rem;
+}
+.grid--stats {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.grid--cards {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.stat__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  margin-bottom: 0.25rem;
+}
+.stat__value {
+  font-size: 1.35rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono);
+  letter-spacing: -0.02em;
+}
+.stat__hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+tr:last-child td {
+  border-bottom: none;
+}
+td.num,
+th.num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Values -------------------------------------------------------------- */
+.profit {
+  color: var(--profit);
+}
+.loss {
+  color: var(--loss);
+}
+.muted {
+  color: var(--text-muted);
+}
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Badges -------------------------------------------------------------- */
+.badge {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.badge--ok {
+  background: var(--profit-bg);
+  color: var(--profit);
+}
+.badge--warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.badge--danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.badge--muted {
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+button,
+.button {
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 550;
+  padding: 0.42rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+button:hover:not(:disabled) {
+  background: var(--bg-sunken);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+button.danger {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+button.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.button-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* --- Forms --------------------------------------------------------------- */
+label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 550;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: 0.86rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.field {
+  margin-bottom: 0.8rem;
+}
+.field__hint {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  margin-top: 0.2rem;
+}
+
+/* --- Notices ------------------------------------------------------------- */
+.notice {
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.83rem;
+  border: 1px solid;
+  margin-bottom: 0.85rem;
+}
+.notice--error {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.notice--warn {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.notice--info {
+  background: var(--bg-sunken);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 0.88rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.page-header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  max-width: 65ch;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.disclaimer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  max-width: 75ch;
+}
+
+/* --- Auth ---------------------------------------------------------------- */
+.auth {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.auth__card {
+  width: 100%;
+  max-width: 380px;
+}
+
+/* --- Equity sparkline ---------------------------------------------------- */
+.spark {
+  width: 100%;
+  height: 60px;
+  display: block;
+}
