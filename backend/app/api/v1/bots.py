@@ -26,10 +26,12 @@ from app.core.logging import get_logger
 from app.database.models import Bot, Strategy, StrategyVersion
 from app.database.repositories import (
     AuditLogRepository,
+    BotEventRepository,
     BotRepository,
     StrategyRepository,
 )
 from app.paper_trading.factory import build_paper_bot
+from app.paper_trading.recorder import BotStateRecorder
 from app.paper_trading.runtime import TradingBot, bot_registry
 from app.risk.limits import RiskLimits
 from app.strategies.registry import create_strategy
@@ -172,6 +174,15 @@ async def start_bot(
         # against and startup would otherwise fail on an empty comparison.
         reconcile_on_start=False,
     )
+
+    # Without this the entire run is lost when the process ends: orders, positions, closed
+    # trades and the event log all live in the runtime's memory. The recorder writes them as
+    # they happen, and its failures are contained so a database problem cannot stop a bot
+    # managing an open position.
+    recorder = BotStateRecorder(bot_id=record.id, user_id=user.id)
+    recorder.bind(runtime)
+    runtime.event_handler = recorder
+
     if existing is not None:
         await bot_registry.unregister(bot_id)
     await bot_registry.register(runtime)
@@ -302,10 +313,39 @@ async def run_one_cycle(bot_id: str, user: CurrentUser) -> dict[str, Any]:
 
 @router.get("/{bot_id}/events", response_model=list[BotEventResponse])
 async def bot_events(
-    bot_id: str, user: CurrentUser, limit: int = 100
+    bot_id: str, user: CurrentUser, session: SessionDep, limit: int = 100
 ) -> list[BotEventResponse]:
-    runtime = _require_runtime(bot_id, user.id)
-    events = runtime.events[-min(limit, 500) :]
+    """This bot's activity log.
+
+    Read from the database, so the history of a run survives the process that produced it -
+    a bot that has been stopped, or one whose events predate a restart, still has a story to
+    show. The in-memory log is the fallback for the case where recording itself failed: the
+    bot is visibly running and answering with nothing at all would be the worse lie.
+    """
+    capped = min(limit, 500)
+    await BotRepository(session).require_for_owner(bot_id, user.id)
+
+    stored = await BotEventRepository(session).recent_for_bot(
+        user.id, bot_id, limit=capped
+    )
+    if stored:
+        return [
+            BotEventResponse.model_validate(
+                {
+                    "event_type": row.event_type,
+                    "message": row.message,
+                    "severity": row.severity,
+                    "payload": row.payload,
+                    "occurred_at": row.occurred_at,
+                }
+            )
+            for row in stored
+        ]
+
+    runtime = bot_registry.get(bot_id)
+    if runtime is None or runtime.config.user_id != user.id:
+        return []
+    events = runtime.events[-capped:]
     return [BotEventResponse.model_validate(e.to_dict()) for e in reversed(events)]
 
 

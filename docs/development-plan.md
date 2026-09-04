@@ -115,7 +115,7 @@ These are stated in the README too. They are not hidden.
 
 Everything below was executed, not assumed:
 
-* Test suite: **624 passing**, including the full end-to-end acceptance scenario
+* Test suite: **649 passing**, including the full end-to-end acceptance scenario
 * `ruff check` clean, `mypy app` clean across 101 source files
 * Docker image builds; container serves the API and reports healthy
 * Migrations upgrade and downgrade cleanly
@@ -126,3 +126,5 @@ Everything below was executed, not assumed:
 * Backup script produces a restorable archive
 * Desktop application launches, serves the dashboard on one port, and shuts down cleanly
 * News feeds fetched live: 131 articles across 6 publishers, filtered per asset
+* A bot's orders, positions, closed trades and event log are persisted as they happen,
+  so a run survives the process that produced it
